@@ -1420,9 +1420,9 @@
 
         if (display) {
           display.textContent = token;
-          display.classList.remove("fade-in");
+          // display.classList.remove("fade-in");
           void display.offsetWidth; // 強制リフロー
-          display.classList.add("fade-in");
+          // display.classList.add("fade-in");
         }
         if (progress) {
           progress.style.width = `${
