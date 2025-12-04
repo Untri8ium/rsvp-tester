@@ -1,0 +1,1588 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>読解速度測定テスト</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Firebase SDKのインポート (アプリで使用しない場合でも、環境要件として残します) -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+      import {
+        getAuth,
+        signInAnonymously,
+        signInWithCustomToken,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+      import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+      // グローバル変数定義 (環境に依存しないデフォルト値を設定)
+      window.__app_id =
+        typeof __app_id !== "undefined" ? __app_id : "reading-speed-test";
+      window.__firebase_config =
+        typeof __firebase_config !== "undefined" ? __firebase_config : "{}";
+      window.__initial_auth_token =
+        typeof __initial_auth_token !== "undefined"
+          ? __initial_auth_token
+          : null;
+
+      const firebaseConfig = JSON.parse(window.__firebase_config);
+
+      if (Object.keys(firebaseConfig).length > 0) {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // 認証処理
+        onAuthStateChanged(auth, async (user) => {
+          if (!user) {
+            try {
+              if (window.__initial_auth_token) {
+                await signInWithCustomToken(auth, window.__initial_auth_token);
+              } else {
+                await signInAnonymously(auth);
+              }
+            } catch (error) {
+              console.error("Firebase Auth failed:", error);
+            }
+          }
+        });
+      }
+    </script>
+    <style>
+      :root {
+        --primary-color: #4f46e5;
+        --secondary-color: #6366f1;
+      }
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f3f4f6;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 20px;
+      }
+      .container {
+        max-width: 800px;
+        width: 100%;
+        background: white;
+        padding: 32px;
+        border-radius: 12px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+          0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      }
+      .btn {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        text-align: center;
+      }
+      .btn-primary {
+        background-color: var(--primary-color);
+        color: white;
+      }
+      .btn-primary:hover {
+        background-color: var(--secondary-color);
+      }
+      .reading-passage {
+        min-height: 120px;
+        padding: 16px;
+        border: 1px solid #e5e7eb;
+        background-color: #f9fafb;
+        border-radius: 8px;
+        text-align: justify;
+        line-height: 1.8;
+        font-size: 1.125rem;
+      }
+      .rsvp-token {
+        font-size: 2rem;
+        font-weight: 700;
+        display: block;
+        text-align: center;
+        height: 120px;
+        line-height: 120px;
+        color: var(--primary-color);
+      }
+      .progress-bar {
+        height: 8px;
+        background-color: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .progress-bar-fill {
+        height: 100%;
+        background-color: #10b981;
+        transition: width 0.1s linear;
+      }
+      .fade-in {
+        animation: fadeIn 0.5s ease-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container">
+      <!-- コンテンツはJavaScriptによってここに挿入されます -->
+    </div>
+
+    <script>
+      // ====================================================================
+      // 1. 問題データプール
+      // ====================================================================
+
+      const problemPoolData = [
+        // ガイド問題 (type: 'guide') - 測定に影響しない
+        {
+          id: 1,
+          type: "guide",
+          passage:
+            "吾輩は猫である。名前はまだない。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで初めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。この書生というのは時々我々を捕まえて煮て食うという話である。しかし、その当時の吾輩はそんな事を一向知らず、ただ彼の掌に乗せられてスーと持ち上げられた時、何だかフワフワした感じがしたばかりである。",
+          passageTokens: [
+            "吾輩は猫である。",
+            "名前はまだない。",
+            "どこで生れたかとんと見当がつかぬ。",
+            "何でも薄暗いじめじめした所で",
+            "ニャーニャー泣いていた事だけは記憶している。",
+            "吾輩はここで初めて人間というものを見た。",
+            "しかもあとで聞くとそれは書生という人間中で",
+            "一番獰悪な種族であったそうだ。",
+            "この書生というのは時々我々を捕まえて",
+            "煮て食うという話である。",
+            "しかし、その当時の吾輩はそんな事を",
+            "一向知らず、ただ彼の掌に乗せられて",
+            "スーと持ち上げられた時、",
+            "何だかフワフワした感じがしたばかりである。",
+          ],
+          questions: [
+            {
+              text: "「吾輩」が初めて見た「人間」の種族は何と形容されているか？",
+              options: [
+                "穏やかな種族",
+                "獰悪な種族",
+                "平凡な種族",
+                "親切な種族",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "「吾輩」が掌に乗せられた時の感じはどのようなものだったか？",
+              options: [
+                "チクチクした",
+                "ズシッとした",
+                "フワフワした",
+                "ヒヤッとした",
+              ],
+              answerIndex: 2,
+            },
+          ],
+        },
+        {
+          id: 2,
+          type: "guide",
+          passage:
+            "太陽系の惑星の中で、地球は生命の存在が確認されている唯一の天体です。その理由は、液体の水が存在できる絶妙な距離、適度な大気組成、そして磁場の存在など、複数の要因が絡み合っているからです。特に、磁場は太陽風から地球を守る盾として機能し、生命のDNAを損傷から守る重要な役割を果たしています。この奇跡的なバランスは、数十億年にわたる進化と惑星形成の過程で偶然に生まれたものです。",
+          passageTokens: [
+            "太陽系の惑星の中で、",
+            "地球は生命の存在が確認されている",
+            "唯一の天体です。",
+            "その理由は、",
+            "液体の水が存在できる絶妙な距離、",
+            "適度な大気組成、",
+            "そして磁場の存在など、",
+            "複数の要因が絡み合っているからです。",
+            "特に、磁場は太陽風から",
+            "地球を守る盾として機能し、",
+            "生命のDNAを損傷から守る",
+            "重要な役割を果たしています。",
+            "この奇跡的なバランスは、",
+            "数十億年にわたる進化と",
+            "惑星形成の過程で",
+            "偶然に生まれたものです。",
+          ],
+          questions: [
+            {
+              text: "地球に生命が存在できる理由として、文章で言及されていないものはどれか？",
+              options: [
+                "液体の水の存在",
+                "適度な大気組成",
+                "活発な火山活動",
+                "磁場の存在",
+              ],
+              answerIndex: 2,
+            },
+            {
+              text: "磁場が果たしている最も重要な役割は何か？",
+              options: [
+                "地球の気温を保つ",
+                "太陽風から生命を守る",
+                "月の公転を制御する",
+                "潮の満ち引きを発生させる",
+              ],
+              answerIndex: 1,
+            },
+          ],
+        },
+        // 測定用問題 (type: 'measurement')
+        {
+          id: 3,
+          type: "measurement",
+          passage:
+            "近年、AI技術の進化により、自動運転車の実用化が現実味を帯びてきました。しかし、技術的な課題だけでなく、法的な整備も重要な課題となっています。特に、事故が発生した際の責任の所在を、運転者、システム開発者、あるいは自動車メーカーのどこに帰属させるかという点は、国際的にも議論が続いています。倫理的な側面では、避けられない事故の際に、AIが乗員の安全を優先するか、歩行者の安全を優先するかといった判断基準の設定も求められています。",
+          passageTokens: [
+            "近年、AI技術の進化により、",
+            "自動運転車の実用化が",
+            "現実味を帯びてきました。",
+            "しかし、技術的な課題だけでなく、",
+            "法的な整備も重要な課題となっています。",
+            "特に、事故が発生した際の",
+            "責任の所在を、運転者、",
+            "システム開発者、あるいは",
+            "自動車メーカーのどこに帰属させるかという点は、",
+            "国際的にも議論が続いています。",
+            "倫理的な側面では、避けられない事故の際に、",
+            "AIが乗員の安全を優先するか、",
+            "歩行者の安全を優先するかといった",
+            "判断基準の設定も求められています。",
+          ],
+          questions: [
+            {
+              text: "自動運転車に関する議論で、国際的に課題となっているのは主にどのような点か？",
+              options: [
+                "車両デザインの統一",
+                "事故発生時の責任の所在",
+                "燃料効率の改善",
+                "高速道路での最高速度",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "避けられない事故の際に、AIに求められる判断基準の設定には、どのような側面があるか？",
+              options: [
+                "経済的な側面",
+                "美的な側面",
+                "倫理的な側面",
+                "環境的な側面",
+              ],
+              answerIndex: 2,
+            },
+          ],
+        },
+        {
+          id: 4,
+          type: "measurement",
+          passage:
+            "深海生物の生態は、光がほとんど届かない、高圧で極低温の過酷な環境に適応した驚くべき進化の産物です。彼らは、浅瀬の生物が持つ光合成に依存する食物連鎖とは異なり、海底の熱水噴出孔から湧き出る化学物質を利用する「化学合成」を基盤とした独自の生態系を築いています。例えば、チューブワームと呼ばれる生物は、口や消化器官を持たず、体内に共生させるバクテリアを通じて栄養を得ています。この発見は、地球外生命体の可能性を考える上でも重要な示唆を与えています。",
+          passageTokens: [
+            "深海生物の生態は、",
+            "光がほとんど届かない、",
+            "高圧で極低温の過酷な環境に",
+            "適応した驚くべき進化の産物です。",
+            "彼らは、浅瀬の生物が持つ",
+            "光合成に依存する食物連鎖とは異なり、",
+            "海底の熱水噴出孔から湧き出る",
+            "化学物質を利用する",
+            "「化学合成」を基盤とした",
+            "独自の生態系を築いています。",
+            "例えば、チューブワームと呼ばれる生物は、",
+            "口や消化器官を持たず、",
+            "体内に共生させるバクテリアを通じて",
+            "栄養を得ています。",
+            "この発見は、地球外生命体の可能性を",
+            "考える上でも重要な示唆を与えています。",
+          ],
+          questions: [
+            {
+              text: "深海生物が独自の生態系を築く基盤となっているのは何か？",
+              options: ["太陽光発電", "火山エネルギー", "化学合成", "電気分解"],
+              answerIndex: 2,
+            },
+            {
+              text: "チューブワームの栄養摂取の特徴として正しいのはどれか？",
+              options: [
+                "他の深海魚を捕食する",
+                "海水をろ過する",
+                "光合成を行う",
+                "共生バクテリアを利用する",
+              ],
+              answerIndex: 3,
+            },
+          ],
+        },
+        {
+          id: 5,
+          type: "measurement",
+          passage:
+            "古代ローマの公共浴場は、単なる衛生施設ではなく、社交とレジャーの中心地でした。浴場は市民階級の区別なく利用可能であり、運動場、図書館、飲食施設などが併設されていました。特にカラカラ浴場のような大規模な施設は、その壮麗な建築と複雑な温調システムによって、当時の高度な土木技術を今に伝えています。これらの施設は、ローマ帝国の公衆衛生に対する意識の高さを象徴しており、現代のスパ文化にも影響を与えています。",
+          passageTokens: [
+            "古代ローマの公共浴場は、",
+            "単なる衛生施設ではなく、",
+            "社交とレジャーの中心地でした。",
+            "浴場は市民階級の区別なく",
+            "利用可能であり、",
+            "運動場、図書館、",
+            "飲食施設などが併設されていました。",
+            "特にカラカラ浴場のような",
+            "大規模な施設は、",
+            "その壮麗な建築と",
+            "複雑な温調システムによって、",
+            "当時の高度な土木技術を",
+            "今に伝えています。",
+            "これらの施設は、",
+            "ローマ帝国の公衆衛生に対する",
+            "意識の高さを象徴しており、",
+            "現代のスパ文化にも影響を与えています。",
+          ],
+          questions: [
+            {
+              text: "古代ローマの公共浴場が単なる衛生施設でなかった主な理由として正しいものは？",
+              options: [
+                "貴族専用だったため",
+                "宗教儀式に使われたため",
+                "社交とレジャーの中心だったため",
+                "軍事訓練施設だったため",
+              ],
+              answerIndex: 2,
+            },
+            {
+              text: "カラカラ浴場のような大規模施設が今に伝えているものは何か？",
+              options: [
+                "豪華な芸術品",
+                "高度な土木技術",
+                "珍しい動植物の標本",
+                "古代の貨幣鋳造技術",
+              ],
+              answerIndex: 1,
+            },
+          ],
+        },
+        {
+          id: 6,
+          type: "measurement",
+          passage:
+            "パリのベルナール美術研究所は、小規模ながら革新的な保存技術で知られています。特に17世紀の画家クロード・ロランの風景画に対する独自の劣化分析が評価され、欧州各地の博物館が修復依頼を送っています。同研究所は、色層の化学的変化を追跡するため、独自開発の分光装置『Lumière-7』を用いています。",
+          passageTokens: [
+            "パリの",
+            "ベルナール美術研究所は、",
+            "小規模ながら",
+            "革新的な",
+            "保存技術で",
+            "知られています。",
+            "特に",
+            "17世紀の",
+            "画家",
+            "クロード・ロランの",
+            "風景画に対する",
+            "独自の",
+            "劣化分析が",
+            "評価され、",
+            "欧州各地の",
+            "博物館が",
+            "修復依頼を",
+            "送っています。",
+            "同研究所は、",
+            "色層の",
+            "化学的変化を",
+            "追跡するため、",
+            "独自開発の",
+            "分光装置",
+            "『Lumière-7』を",
+            "用いています。",
+          ],
+          questions: [
+            {
+              text: "研究所が特に評価されている対象は何の分析か？",
+              options: [
+                "古代彫刻",
+                "クロード・ロランの風景画",
+                "建築図面",
+                "写真資料",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "色層変化の追跡に使われる装置の名称は？",
+              options: ["Solaris-2", "Optico-9", "Lumière-7", "PrismX"],
+              answerIndex: 2,
+            },
+          ],
+        },
+
+        {
+          id: 7,
+          type: "measurement",
+          passage:
+            "北海道の星泉天文台では、近年『白嵐彗星』の軌道変化が注目されています。この彗星は1912年に初めて記録され、周期は約113年とされていましたが、最新観測では微小な重力摂動により再接近時期が2年ほど前倒しになる可能性が指摘されています。天文台は国内で唯一、彗星尾部の粒子密度を常時測定しています。",
+          passageTokens: [
+            "北海道の",
+            "星泉天文台では、",
+            "近年",
+            "『白嵐彗星』の",
+            "軌道変化が",
+            "注目されています。",
+            "この彗星は",
+            "1912年に",
+            "初めて",
+            "記録され、",
+            "周期は",
+            "約113年と",
+            "されていましたが、",
+            "最新観測では",
+            "微小な",
+            "重力摂動により、",
+            "再接近時期が",
+            "2年ほど",
+            "前倒しに",
+            "なる可能性が",
+            "指摘されています。",
+            "天文台は",
+            "国内で唯一、",
+            "彗星尾部の",
+            "粒子密度を",
+            "常時",
+            "測定しています。",
+          ],
+          questions: [
+            {
+              text: "白嵐彗星が初めて記録されたのは何年か？",
+              options: ["1870年", "1912年", "1948年", "2001年"],
+              answerIndex: 1,
+            },
+            {
+              text: "星泉天文台が国内唯一測定しているのは何か？",
+              options: [
+                "太陽黒点数",
+                "隕石衝突頻度",
+                "彗星尾部の粒子密度",
+                "銀河中心の電波強度",
+              ],
+              answerIndex: 2,
+            },
+          ],
+        },
+
+        {
+          id: 8,
+          type: "measurement",
+          passage:
+            "京都の万灯寺文庫には、室町時代の僧・梵海が著した『春塔記』の唯一の写本が収蔵されています。この写本は、東山地域の季節祭礼を詳細に記述しており、特に旧三条町の灯籠行列の配置図が貴重だと評価されています。文庫は近年、劣化防止のため温湿度管理装置『K-Climate』を導入しました。",
+          passageTokens: [
+            "京都の",
+            "万灯寺文庫には、",
+            "室町時代の",
+            "僧・梵海が",
+            "著した",
+            "『春塔記』の",
+            "唯一の",
+            "写本が",
+            "収蔵されています。",
+            "この写本は、",
+            "東山地域の",
+            "季節祭礼を",
+            "詳細に",
+            "記述しており、",
+            "特に",
+            "旧三条町の",
+            "灯籠行列の",
+            "配置図が",
+            "貴重だと",
+            "評価されています。",
+            "文庫は",
+            "近年、",
+            "劣化防止のため",
+            "温湿度管理装置",
+            "『K-Climate』を",
+            "導入しました。",
+          ],
+          questions: [
+            {
+              text: "『春塔記』の写本で特に貴重とされる記述は何か？",
+              options: [
+                "寺院建立史",
+                "灯籠行列の配置図",
+                "武将家系図",
+                "薬草の調合法",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "文庫が導入した装置の名称は？",
+              options: ["K-Climate", "AirMaster-4", "HumidX", "ThermoLite"],
+              answerIndex: 0,
+            },
+          ],
+        },
+
+        {
+          id: 9,
+          type: "measurement",
+          passage:
+            "ポルトガル北部のリベイロ港では、地元醸造家マルタ・シルヴェイラが復元した『青葡萄エール』が話題です。16世紀の交易記録に記された配合比を基に再現したもので、特産のアルヴァリンヨ種を使用しています。港の試飲会では、古文書に残る香味の特徴とほぼ一致すると報告されています。",
+          passageTokens: [
+            "ポルトガル北部の",
+            "リベイロ港では、",
+            "地元醸造家",
+            "マルタ・シルヴェイラが",
+            "復元した",
+            "『青葡萄エール』が",
+            "話題です。",
+            "16世紀の",
+            "交易記録に",
+            "記された",
+            "配合比を",
+            "基に",
+            "再現したもので、",
+            "特産の",
+            "アルヴァリンヨ種を",
+            "使用しています。",
+            "港の",
+            "試飲会では、",
+            "古文書に残る",
+            "香味の特徴と",
+            "ほぼ",
+            "一致すると",
+            "報告されています。",
+          ],
+          questions: [
+            {
+              text: "青葡萄エール復元の基になった資料は何か？",
+              options: ["王室令", "交易記録", "航海日誌", "農地台帳"],
+              answerIndex: 1,
+            },
+            {
+              text: "使用されている葡萄の品種は？",
+              options: [
+                "リースリング",
+                "アルヴァリンヨ",
+                "カベルネ",
+                "シャルドネ",
+              ],
+              answerIndex: 1,
+            },
+          ],
+        },
+
+        {
+          id: 10,
+          type: "measurement",
+          passage:
+            "スイスのグランツ数学研究館では、19世紀数学者アーダ・ファルケンの未発表ノートが公開されました。ノートには、整数論に関する独自記号体系が記されており、特に『F-関数列』と呼ばれる数列の初期形が含まれています。研究館は、この記号のデジタル解読に専用ソフト『Falcode』を用いています。",
+          passageTokens: [
+            "スイスの",
+            "グランツ数学研究館では、",
+            "19世紀数学者",
+            "アーダ・ファルケンの",
+            "未発表ノートが",
+            "公開されました。",
+            "ノートには、",
+            "整数論に関する",
+            "独自記号体系が",
+            "記されており、",
+            "特に",
+            "『F-関数列』と",
+            "呼ばれる",
+            "数列の",
+            "初期形が",
+            "含まれています。",
+            "研究館は、",
+            "この記号の",
+            "デジタル解読に",
+            "専用ソフト",
+            "『Falcode』を",
+            "用いています。",
+          ],
+          questions: [
+            {
+              text: "ノートに含まれていた数列の名称は？",
+              options: ["S列", "F-関数列", "P級数", "L-連鎖"],
+              answerIndex: 1,
+            },
+            {
+              text: "記号解読に用いられるソフトは？",
+              options: ["Falcode", "NumSys", "CalcPro", "Scriptor"],
+              answerIndex: 0,
+            },
+          ],
+        },
+        {
+          id: 11,
+          type: "measurement",
+          passage:
+            "奈良県の稲渕谷では、古来より彼岸花の群生地として知られてきた。だが近年、地元民俗史家の佐伯涼真が谷に残る木簡を調査し、7世紀に蘇我家が水路整備の目印として彼岸花を植えた可能性を示した。木簡には当時の地割図も簡略ながら記されていたという。",
+          passageTokens: [
+            "奈良県の",
+            "稲渕谷では、",
+            "古来より",
+            "彼岸花の",
+            "群生地として",
+            "知られてきた。",
+            "だが",
+            "近年、",
+            "地元民俗史家の",
+            "佐伯涼真が",
+            "谷に残る",
+            "木簡を",
+            "調査し、",
+            "7世紀に",
+            "蘇我家が",
+            "水路整備の",
+            "目印として",
+            "彼岸花を",
+            "植えた",
+            "可能性を",
+            "示した。",
+            "木簡には",
+            "当時の",
+            "地割図も",
+            "簡略ながら",
+            "記されていた",
+            "という。",
+          ],
+          questions: [
+            {
+              text: "佐伯涼真が調査した資料は何か？",
+              options: ["石碑", "木簡", "巻物", "陶片"],
+              answerIndex: 1,
+            },
+            {
+              text: "彼岸花を植えたとされる目的は？",
+              options: ["薬草栽培", "観賞用", "水路の目印", "魔除け"],
+              answerIndex: 2,
+            },
+          ],
+        },
+
+        {
+          id: 12,
+          type: "measurement",
+          passage:
+            "長崎の雲峰灯台は、1878年に英国出身の技師ヘンリー・ダウソンが設計した。灯台の構造は三重石壁となっており、台風時の風衝を分散させる工夫が見られる。近年の調査で、内部に未使用の観測室があることが判明し、航海史研究家の間で注目が高まっている。",
+          passageTokens: [
+            "長崎の",
+            "雲峰灯台は、",
+            "1878年に",
+            "英国出身の",
+            "技師",
+            "ヘンリー・ダウソンが",
+            "設計した。",
+            "灯台の",
+            "構造は",
+            "三重石壁となっており、",
+            "台風時の",
+            "風衝を",
+            "分散させる",
+            "工夫が",
+            "見られる。",
+            "近年の",
+            "調査で、",
+            "内部に",
+            "未使用の",
+            "観測室が",
+            "あることが",
+            "判明し、",
+            "航海史研究家の",
+            "間で",
+            "注目が",
+            "高まっている。",
+          ],
+          questions: [
+            {
+              text: "雲峰灯台を設計した人物は？",
+              options: [
+                "ロバート・スコット",
+                "ヘンリー・ダウソン",
+                "アレン・クライトン",
+                "ジェームズ・ホール",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "灯台内部で新たに見つかったものは？",
+              options: ["貯水庫", "未使用の観測室", "作業場", "水位計室"],
+              answerIndex: 1,
+            },
+          ],
+        },
+
+        {
+          id: 13,
+          type: "measurement",
+          passage:
+            "瀬戸内の美影島では、毎年秋に行われる『風弦祭』が島民の主要行事となっている。しかし、最近発見された江戸前期の記録によると、儀式に使われた弦楽器は現在の三味線ではなく、弓状の一弦器『美影琴』だったらしい。考古班は破片から復元作業を進めている。",
+          passageTokens: [
+            "瀬戸内の",
+            "美影島では、",
+            "毎年秋に",
+            "行われる",
+            "『風弦祭』が",
+            "島民の",
+            "主要行事となっている。",
+            "しかし、",
+            "最近",
+            "発見された",
+            "江戸前期の",
+            "記録によると、",
+            "儀式に",
+            "使われた",
+            "弦楽器は",
+            "現在の",
+            "三味線ではなく、",
+            "弓状の",
+            "一弦器",
+            "『美影琴』だった",
+            "らしい。",
+            "考古班は",
+            "破片から",
+            "復元作業を",
+            "進めている。",
+          ],
+          questions: [
+            {
+              text: "江戸前期に祭で使われていた楽器は？",
+              options: ["三味線", "琵琶", "美影琴", "箏"],
+              answerIndex: 2,
+            },
+            {
+              text: "現在行われている祭の名称は？",
+              options: ["風弦祭", "波灯祭", "迎潮祭", "谷風祭"],
+              answerIndex: 0,
+            },
+          ],
+        },
+
+        {
+          id: 14,
+          type: "measurement",
+          passage:
+            "アルゼンチン南部のラナ湖では、冬季になると湖面下で微弱な発光が観測される。生物学者パトリシア・メンデスは、この光が湖底の『エルマ鉱層』に生息する特異な藻類の代謝反応によるものと仮説を立てた。調査隊は採取装置Lumina-Glassを用いて採集を開始した。",
+          passageTokens: [
+            "アルゼンチン南部の",
+            "ラナ湖では、",
+            "冬季になると",
+            "湖面下で",
+            "微弱な",
+            "発光が",
+            "観測される。",
+            "生物学者",
+            "パトリシア・メンデスは、",
+            "この光が",
+            "湖底の",
+            "『エルマ鉱層』に",
+            "生息する",
+            "特異な",
+            "藻類の",
+            "代謝反応による",
+            "ものと",
+            "仮説を",
+            "立てた。",
+            "調査隊は",
+            "採取装置",
+            "Lumina-Glassを",
+            "用いて",
+            "採集を",
+            "開始した。",
+          ],
+          questions: [
+            {
+              text: "発光の原因とされたものは？",
+              options: [
+                "魚の群れ",
+                "藻類の代謝反応",
+                "鉱石の摩擦",
+                "地下水の反射",
+              ],
+              answerIndex: 1,
+            },
+            {
+              text: "調査に使用された採取装置は？",
+              options: [
+                "Photon-Net",
+                "GlowCapture",
+                "Lumina-Glass",
+                "AquaProbe",
+              ],
+              answerIndex: 2,
+            },
+          ],
+        },
+
+        {
+          id: 15,
+          type: "measurement",
+          passage:
+            "宮城県の黒砂温泉は、近世に伊達家の湯治場として整備された歴史を持つ。温泉の湧出口近くで、最近、家臣の葛西重宗が記した湯治日誌が発見された。日誌には、当時の湯温調整のために『砂籠石』と呼ばれる特殊石材が使われていたと記録されている。",
+          passageTokens: [
+            "宮城県の",
+            "黒砂温泉は、",
+            "近世に",
+            "伊達家の",
+            "湯治場として",
+            "整備された",
+            "歴史を",
+            "持つ。",
+            "温泉の",
+            "湧出口近くで、",
+            "最近、",
+            "家臣の",
+            "葛西重宗が",
+            "記した",
+            "湯治日誌が",
+            "発見された。",
+            "日誌には、",
+            "当時の",
+            "湯温調整のために",
+            "『砂籠石』と",
+            "呼ばれる",
+            "特殊石材が",
+            "使われていた",
+            "と",
+            "記録されている。",
+          ],
+          questions: [
+            {
+              text: "葛西重宗が記した資料は何か？",
+              options: ["湯治日誌", "家計簿", "検地帳", "登城録"],
+              answerIndex: 0,
+            },
+            {
+              text: "湯温調整に使われたとされるものは？",
+              options: ["竹筒石", "砂籠石", "赤岩板", "黒鉄石"],
+              answerIndex: 1,
+            },
+          ],
+        },
+
+        {
+          id: 16,
+          type: "measurement",
+          passage:
+            "アフリカ東部のイルガ渓谷にある遺跡では、古代部族ルマラ族が用いたとされる交易印が多数出土した。考古隊の報告によると、印章の一つには『ネラ紋』と呼ばれる独特の渦模様が刻まれており、これは部族間の印識として機能した可能性が高いという。",
+          passageTokens: [
+            "アフリカ東部の",
+            "イルガ渓谷にある",
+            "遺跡では、",
+            "古代部族",
+            "ルマラ族が",
+            "用いたとされる",
+            "交易印が",
+            "多数",
+            "出土した。",
+            "考古隊の",
+            "報告によると、",
+            "印章の",
+            "一つには",
+            "『ネラ紋』と",
+            "呼ばれる",
+            "独特の",
+            "渦模様が",
+            "刻まれており、",
+            "これは",
+            "部族間の",
+            "印識として",
+            "機能した",
+            "可能性が",
+            "高いという。",
+          ],
+          questions: [
+            {
+              text: "印章に刻まれていた模様の名称は？",
+              options: ["サラ紋", "ネラ紋", "バル紋", "ルガ紋"],
+              answerIndex: 1,
+            },
+            {
+              text: "印章は何に使われた可能性が高いか？",
+              options: ["食料保存", "祭祀の灯火", "部族間の印識", "建築装飾"],
+              answerIndex: 2,
+            },
+          ],
+        },
+      ];
+
+      // ====================================================================
+      // 2. 状態管理
+      // ====================================================================
+
+      const Modes = {
+        NORMAL: "Normal",
+        RSVP: "RSVP",
+      };
+
+      const TestState = {
+        SCREEN: "START", // START, GUIDE_TEST, ADAPTIVE_TEST, READING, QUESTION, RESULT
+        currentMode: null,
+        currentProblem: null,
+        problemIndex: 0,
+        readingStartTime: null,
+        readingTimer: null,
+        questionTimer: null,
+        problemPool: [...problemPoolData],
+        usedProblemIds: [],
+      };
+
+      // 各方式の推定パラメータ
+      const ModelParams = {
+        [Modes.NORMAL]: {
+          // CPM (Characters Per Minute) 読解スピードの推定値 (P(correct)=0.8に対応)
+          cpm: 600,
+          // sigma (信頼度/不確実性) 小さいほど推定が確実
+          sigma: 200,
+          // 収集されたデータポイント: [{cpm_measured, score}]
+          data: [],
+          isComplete: false,
+        },
+        [Modes.RSVP]: {
+          cpm: 600,
+          sigma: 200,
+          data: [],
+          isComplete: false,
+        },
+      };
+
+      const Constants = {
+        MAX_PROBLEMS: problemPoolData.filter((p) => p.type === "measurement")
+          .length, // 測定問題数
+        SIGMA_THRESHOLD: 100, // テスト終了の閾値
+        QUESTION_TIME_LIMIT_SEC: 30, // 小問の回答制限時間 (秒)
+        TARGET_SCORE: 0.9, // 目標正答率
+        // 修正: sigmaの減衰率を上げる（より速く確信を持つ）
+        LEARNING_RATE_DECAY: 0.85, // sigmaの更新率 (0.9 -> 0.85)
+        CPM_LOWER_BOUND: 100,
+        CPM_UPPER_BOUND: 2000,
+        // 追加: CPM更新時の増幅係数
+        CPM_ADJUSTMENT_FACTOR: 1.5, // 調整係数 (1.0 -> 1.5)
+        // 追加: ログスケールへの変換係数 (ここでは標準的な正規化係数として使用)
+        LOG_SCALE_FACTOR: 100,
+      };
+
+      /**
+       * 統計モデルを更新し、次回の目標CPMと信頼度を更新する。
+       * (ベイズ推定の特性を反映した、よりアグレッシブな逐次推定ロジック)
+       * @param {string} mode - Modes.NORMAL または Modes.RSVP
+       * @param {number} measuredCpm - 今回の目標CPM
+       * @param {number} score - 今回の得点 (0, 0.5, 1)
+       */
+      function updateModel(mode, measuredCpm, score) {
+        const params = ModelParams[mode];
+
+        // 1. データポイントの記録
+        params.data.push({ cpm_measured: measuredCpm, score: score });
+
+        // 2. CPMをログスケールに見立てて扱う（変動をより適切に）
+        // cpmの変動を、現在のCPMと誤差に比例させて大きくする。
+        const error = score - Constants.TARGET_SCORE;
+
+        // **修正ロジックの核心:**
+        // 1. **変動率の増幅:** 50をConstants.CPM_ADJUSTMENT_FACTORに変更し、影響を増幅。
+        // 2. **sigmaの役割強化:** learningRate (params.sigma / 500) が大きいほど更新幅が大きくなる
+        // 3. **CPMに依存した更新:** 現在のCPMが高ければ、同じスコア誤差でもより大きな絶対量のCPMが動くように調整
+
+        // ログスケール的な更新: newCpm = params.cpm * exp(error * adjustment) に近い振る舞いをさせる
+        // 目標正答率からの誤差が大きいほど、CPMの「比率」が大きく変動するようにする
+
+        // 変更前: let newCpm = params.cpm + error * learningRate * 50;
+        // 変更後:
+
+        // 分散による更新係数 (sigmaが大きいほど初期は大きく動く)
+        const varianceFactor =
+          (params.sigma / 200) * Constants.CPM_ADJUSTMENT_FACTOR;
+
+        // 誤差を増幅し、現在のCPMに比例させることで対数正規分布的な振る舞いを模倣
+        let deltaCpm =
+          error * varianceFactor * (params.cpm / Constants.LOG_SCALE_FACTOR);
+
+        // 正答率0（error=-0.8）の例: cpm=600, sigma=200 の場合
+        // varianceFactor = (200/200) * 1.5 = 1.5
+        // deltaCpm = -0.8 * 1.5 * (600/100) = -0.8 * 1.5 * 6 = -7.2 * CPM単位 (この計算だと小さすぎるため、もう少し調整します)
+
+        // 調整: 絶対値を大きくする定数を導入し、sigmaが低いと変動が小さいことを保証
+        const SCALING_CONSTANT = 100; // 調整定数
+
+        deltaCpm =
+          error *
+          (params.sigma / 200) *
+          SCALING_CONSTANT *
+          Constants.CPM_ADJUSTMENT_FACTOR;
+
+        let newCpm = params.cpm + deltaCpm;
+
+        // 3. CPMの境界値チェック
+        newCpm = Math.max(
+          Constants.CPM_LOWER_BOUND,
+          Math.min(newCpm, Constants.CPM_UPPER_BOUND)
+        );
+
+        // 4. sigma（信頼度）の減衰
+        const newSigma = params.sigma * Constants.LEARNING_RATE_DECAY;
+
+        params.cpm = newCpm;
+        params.sigma = newSigma;
+
+        // 5. 完了チェック
+        if (
+          params.data.filter((d) => d.score !== 0.5).length >= 2 &&
+          params.sigma <= Constants.SIGMA_THRESHOLD
+        ) {
+          params.isComplete = true;
+        }
+
+        console.log(
+          `[${mode}] Update: CPM=${params.cpm.toFixed(
+            2
+          )}, DeltaCPM=${deltaCpm.toFixed(2)}, Sigma=${params.sigma.toFixed(2)}`
+        );
+      }
+
+      /**
+       * 次に出題する問題の方式を決定する。
+       * @returns {string} Modes.NORMAL または Modes.RSVP
+       */
+      function getNextMode() {
+        const normal = ModelParams[Modes.NORMAL];
+        const rsvp = ModelParams[Modes.RSVP];
+
+        // 両方終了
+        if (normal.isComplete && rsvp.isComplete) {
+          return null;
+        }
+        // 片方のみ終了
+        if (normal.isComplete) return Modes.RSVP;
+        if (rsvp.isComplete) return Modes.NORMAL;
+
+        // 両方未終了の場合、ランダムに選択
+        // ただし、sigmaが大きい方（不確実な方）を優先する (Adaptive Testの基本的な考え方)
+        if (normal.sigma > rsvp.sigma) {
+          return Modes.NORMAL;
+        } else if (rsvp.sigma > normal.sigma) {
+          return Modes.RSVP;
+        } else {
+          return Math.random() < 0.5 ? Modes.NORMAL : Modes.RSVP;
+        }
+      }
+
+      /**
+       * 次に出題する問題を取得し、使用済みとしてマークする。
+       * @param {string} type - 'guide' or 'measurement'
+       * @returns {object|null} 問題オブジェクト
+       */
+      function getNextProblem(type) {
+        const availableProblems = TestState.problemPool.filter(
+          (p) => p.type === type && !TestState.usedProblemIds.includes(p.id)
+        );
+
+        if (availableProblems.length === 0) {
+          return null;
+        }
+
+        // ガイド問題は順序固定、測定問題はランダム
+        let problem;
+        if (type === "guide") {
+          problem = availableProblems[0]; // 常にリストの最初から取得
+        } else {
+          const randomIndex = Math.floor(
+            Math.random() * availableProblems.length
+          );
+          problem = availableProblems[randomIndex];
+        }
+
+        // 問題を使用済みリストに追加
+        TestState.usedProblemIds.push(problem.id);
+        return problem;
+      }
+
+      // ====================================================================
+      // 4. UIレンダリングとイベントハンドラ
+      // ====================================================================
+
+      const appDiv = document.getElementById("app");
+
+      /**
+       * メインのレンダリング関数。現在の状態に応じて画面を切り替える。
+       */
+      function render() {
+        appDiv.innerHTML = "";
+        let content = "";
+
+        switch (TestState.SCREEN) {
+          case "START":
+            content = renderStartScreen();
+            break;
+          case "READING":
+            content = renderReadingView();
+            break;
+          case "QUESTION":
+            content = renderQuestionView();
+            break;
+          case "RESULT":
+            content = renderResultScreen();
+            break;
+          case "GUIDE_TEST":
+          case "ADAPTIVE_TEST":
+            // These states trigger problem setup and transition to READING
+            startNextProblem();
+            return; // setup function handles rendering next screen
+          default:
+            content = `<div class="p-4 text-center text-red-500">エラー: 不正な状態です。</div>`;
+        }
+        appDiv.innerHTML = content;
+      }
+
+      function renderStartScreen() {
+        return `
+                <div class="space-y-6">
+                    <h1 class="text-3xl font-bold text-gray-800 border-b pb-3 mb-4">読解速度測定テスト</h1>
+                    <div class="space-y-4 text-gray-700">
+                        <p>このテストでは、あなたが文章をどれくらいのスピードで正確に理解できるかを測定します。</p>
+                        <h2 class="text-xl font-semibold mt-6">テストの手順</h2>
+                        <ol class="list-decimal list-inside pl-4 space-y-2">
+                            <li>まず、ガイド問題として2問出題されます。これは操作に慣れるためのもので、測定結果には影響しません。</li>
+                            <li>文章が表示されたら、できるだけ内容を理解しながら速く読んでください。</li>
+                            <li>読み終えたら、制限時間内であれば「読み終えた」ボタンを押してください。通常方式では時間経過で自動的に終了します。</li>
+                            <li>文章が消えた後、内容に関する小問が2問出題されます。</li>
+                            <li>小問に回答するための制限時間は30秒です。時間内に回答を完了してください。</li>
+                            <li>結果に基づき、あなたの読解スピードを適応的に測定します。</li>
+                        </ol>
+                        <h2 class="text-xl font-semibold mt-6">出題方式</h2>
+                        <ul class="list-disc list-inside pl-4 space-y-2">
+                            <li>通常方式: 文章全体が一度に表示されます。</li>
+                            <li>RSVP方式: 文章が単語や区切りごとに順番に表示されます。</li>
+                        </ul>
+                        <p class="pt-4 font-semibold text-lg text-red-600">注意: 問題ごとの制限時間は表示されません。</p>
+                    </div>
+                    <div class="pt-6">
+                        <button onclick="startTest()" class="btn btn-primary w-full text-lg">
+                            テストを開始する
+                        </button>
+                    </div>
+                </div>
+            `;
+      }
+
+      function renderReadingView() {
+        const problem = TestState.currentProblem;
+        const mode = TestState.currentMode;
+        const charCount = problem.passage.length;
+        const currentCpm = ModelParams[mode].cpm;
+
+        // 測定CPMを仮定して提示制限時間(分) mを算出: m = c / CPM
+        // 秒に変換: (c / CPM) * 60
+        const readingTimeSeconds = (charCount / currentCpm) * 60;
+
+        TestState.readingTimeLimitMs = Math.round(readingTimeSeconds * 1000);
+        TestState.readingCharCount = charCount;
+        TestState.readingTargetCpm = currentCpm;
+
+        let readingContent = "";
+        let passageElement = "";
+
+        if (mode === Modes.NORMAL) {
+          // 通常方式: 全文表示
+          passageElement = `<p class="text-xl leading-relaxed">${problem.passage}</p>`;
+
+          // 制限時間タイマー設定
+          TestState.readingStartTime = Date.now();
+          TestState.readingTimer = setTimeout(() => {
+            handleReadingEnd(TestState.readingTimeLimitMs);
+          }, TestState.readingTimeLimitMs);
+
+          // UI
+          readingContent = `
+                    <div id="reading-passage" class="reading-passage overflow-y-auto max-h-96 mb-6 fade-in">
+                        ${passageElement}
+                    </div>
+                    <p class="text-sm text-center text-gray-500 mb-4">通常方式で読解中...</p>
+                    <button onclick="handleReadingEnd(Date.now() - TestState.readingStartTime)" class="btn btn-primary w-full" id="read-end-btn">
+                        読み終えた
+                    </button>
+                    <div id="countdown-display" class="hidden"></div> <!-- 通常方式では非表示 -->
+                `;
+        } else if (mode === Modes.RSVP) {
+          // RSVP方式: 逐次表示
+          TestState.rsvpTokenIndex = 0;
+          TestState.rsvpTokens = problem.passageTokens;
+          TestState.rsvpTokenCount = TestState.rsvpTokens.length;
+
+          // チャンクごとの表示時間 (秒): m_chunk = (c / CPM) * 60 / token_count
+          const chunkDisplayTimeMs =
+            TestState.readingTimeLimitMs / TestState.rsvpTokenCount;
+          TestState.rsvpChunkTimeMs = Math.round(chunkDisplayTimeMs);
+
+          passageElement = `<span id="rsvp-display" class="rsvp-token">...</span>`;
+
+          // UI
+          readingContent = `
+                    <div class="reading-passage mb-6 fade-in">
+                        ${passageElement}
+                    </div>
+                    <p class="text-sm text-center text-gray-500 mb-4">RSVP方式で読解中...</p>
+                    <div class="w-full h-2 mb-4">
+                        <div id="rsvp-progress" class="progress-bar-fill bg-indigo-500 h-2" style="width: 0%;"></div>
+                    </div>
+                    <button onclick="handleReadingEnd(Date.now() - TestState.readingStartTime)" class="btn btn-primary w-full opacity-50 cursor-not-allowed" disabled id="read-end-btn">
+                        読み終えた (RSVPは自動終了)
+                    </button>
+                    <div id="countdown-display" class="hidden"></div> <!-- RSVP方式では非表示 -->
+                `;
+        }
+
+        // ガイド問題の注意書き
+        const isGuide = TestState.currentProblem.type === "guide";
+        const guideNote = isGuide
+          ? `<p class="p-2 bg-yellow-100 text-yellow-800 text-sm rounded-md mb-4 font-medium">これはガイド問題です。結果は測定に影響しません。</p>`
+          : "";
+
+        // 共通UI構成
+        return `
+                <h1 class="text-2xl font-semibold text-gray-800 mb-4">${
+                  TestState.currentMode
+                }方式 - 読解</h1>
+                ${guideNote}
+                <div class="bg-indigo-50 p-4 rounded-lg mb-6">
+                    <p class="text-sm text-gray-600">文字数: ${charCount}字</p>
+                    <p class="text-sm text-gray-600">目標CPM: ${Math.round(
+                      currentCpm
+                    )}</p>
+                    ${
+                      mode === Modes.NORMAL
+                        ? `<p class="text-sm text-gray-600">制限時間: ${readingTimeSeconds.toFixed(
+                            1
+                          )}秒</p>`
+                        : `<p class="text-sm text-gray-600">チャンク表示時間: ${TestState.rsvpChunkTimeMs}ms</p>`
+                    }
+                </div>
+                ${readingContent}
+            `;
+      }
+
+      function startRSVP() {
+        TestState.readingStartTime = Date.now();
+        TestState.rsvpTimer = setTimeout(displayNextToken, 0); // 最初のトークンを即時表示
+      }
+
+      function displayNextToken() {
+        if (TestState.rsvpTokenIndex >= TestState.rsvpTokenCount) {
+          // 全トークン表示完了
+          handleReadingEnd(Date.now() - TestState.readingStartTime);
+          return;
+        }
+
+        const token = TestState.rsvpTokens[TestState.rsvpTokenIndex];
+        const display = document.getElementById("rsvp-display");
+        const progress = document.getElementById("rsvp-progress");
+
+        if (display) {
+          display.textContent = token;
+          display.classList.remove("fade-in");
+          void display.offsetWidth; // 強制リフロー
+          display.classList.add("fade-in");
+        }
+        if (progress) {
+          progress.style.width = `${
+            (TestState.rsvpTokenIndex / TestState.rsvpTokenCount) * 100
+          }%`;
+        }
+
+        TestState.rsvpTokenIndex++;
+        TestState.readingTimer = setTimeout(
+          displayNextToken,
+          TestState.rsvpChunkTimeMs
+        );
+      }
+
+      function handleReadingEnd(timeElapsedMs) {
+        clearTimeout(TestState.readingTimer);
+
+        // 経過時間を記録 (RSVPでは全表示完了までの時間、通常では「読み終えた」ボタン押下または制限時間)
+        TestState.readingTimeElapsedMs = timeElapsedMs;
+
+        // 状態遷移
+        TestState.SCREEN = "QUESTION";
+        render();
+      }
+
+      function renderQuestionView() {
+        const problem = TestState.currentProblem;
+
+        let html = `
+                <h1 class="text-2xl font-semibold text-gray-800 mb-4">理解度チェック (${TestState.currentMode}方式)</h1>
+                <p class="p-3 mb-6 rounded-lg bg-red-50 text-red-700 font-medium text-center">
+                    制限時間: <span id="question-countdown">${Constants.QUESTION_TIME_LIMIT_SEC}</span>秒
+                </p>
+                <form id="question-form" class="space-y-8">
+            `;
+
+        problem.questions.forEach((q, qIndex) => {
+          html += `
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm">
+                        <p class="font-bold text-lg mb-3">問${qIndex + 1}. ${
+            q.text
+          }</p>
+                        <div class="space-y-2">
+                `;
+          q.options.forEach((option, oIndex) => {
+            html += `
+                        <label class="flex items-center p-3 border border-gray-200 rounded-md cursor-pointer hover:bg-white transition duration-150">
+                            <input type="radio" name="q${qIndex}" value="${oIndex}" class="form-radio text-indigo-600 h-5 w-5 mr-3">
+                            <span class="text-gray-700">${option}</span>
+                        </label>
+                    `;
+          });
+          html += `
+                        </div>
+                    </div>
+                `;
+        });
+
+        html += `
+                    <div class="pt-4">
+                        <button type="submit" class="btn btn-primary w-full text-lg">
+                            回答を送信する
+                        </button>
+                    </div>
+                </form>
+            `;
+
+        // 制限時間タイマー設定
+        let timeLeft = Constants.QUESTION_TIME_LIMIT_SEC;
+        const countdownEl = document.getElementById("question-countdown");
+
+        // フォームの送信ハンドラを設置
+        setTimeout(() => {
+          const form = document.getElementById("question-form");
+          if (form) {
+            form.onsubmit = (e) => {
+              e.preventDefault();
+              clearTimeout(TestState.questionTimer);
+              handleSubmitAnswers(e.target);
+            };
+          }
+        }, 0); // DOMレンダリング後にイベントを設定
+
+        // カウントダウン開始
+        const countdown = () => {
+          if (timeLeft <= 0) {
+            clearTimeout(TestState.questionTimer);
+            // 時間切れの場合は強制的に提出（未回答は不正解扱い）
+            handleSubmitAnswers(document.getElementById("question-form"));
+            return;
+          }
+          if (countdownEl) {
+            countdownEl.textContent = timeLeft;
+          }
+          timeLeft--;
+          TestState.questionTimer = setTimeout(countdown, 1000);
+        };
+
+        TestState.questionTimer = setTimeout(countdown, 1000); // 1秒後に開始
+
+        return html;
+      }
+
+      /**
+       * 小問の回答を処理し、得点を計算してモデルを更新する。
+       * @param {HTMLFormElement} form - 回答フォームの要素
+       */
+      function handleSubmitAnswers(form) {
+        clearTimeout(TestState.questionTimer);
+        const problem = TestState.currentProblem;
+        let correctCount = 0;
+
+        problem.questions.forEach((q, qIndex) => {
+          const selectedOption = form.querySelector(
+            `input[name="q${qIndex}"]:checked`
+          );
+          if (
+            selectedOption &&
+            parseInt(selectedOption.value) === q.answerIndex
+          ) {
+            correctCount++;
+          }
+        });
+
+        // 得点計算: 0, 0.5 (1問正解), 1 (2問正解)
+        const score = correctCount / 2;
+
+        // 読解スピードの計算 (測定CPM)
+        // CPM = (文字数 / 経過時間(ms)) * 60 * 1000
+        const measuredCpm =
+          (TestState.readingCharCount / TestState.readingTimeElapsedMs) * 60000;
+
+        if (problem.type === "measurement") {
+          // 測定問題の場合のみモデルを更新
+          updateModel(TestState.currentMode, measuredCpm, score);
+        } else {
+          // ガイド問題の場合
+          const guideNote =
+            TestState.currentMode === Modes.NORMAL
+              ? "通常方式のガイド問題完了。次はRSVP方式のガイド問題です。"
+              : "RSVP方式のガイド問題完了。測定を開始します。";
+          console.log(
+            `[Guide] Mode: ${
+              TestState.currentMode
+            }, Score: ${score}, Measured CPM: ${measuredCpm.toFixed(0)}`
+          );
+        }
+
+        // 次の状態へ遷移
+        if (TestState.SCREEN === "QUESTION") {
+          // ▼▼▼ 修正箇所: < 2 を < 1 に変更しました ▼▼▼
+          if (TestState.problemIndex < 1) {
+            // ガイド問題の次の問題へ
+            TestState.problemIndex++;
+            TestState.SCREEN = "GUIDE_TEST";
+          } else {
+            // 測定問題へ
+            TestState.SCREEN = "ADAPTIVE_TEST";
+          }
+          render();
+        }
+      }
+
+      function renderResultScreen() {
+        const normal = ModelParams[Modes.NORMAL];
+        const rsvp = ModelParams[Modes.RSVP];
+
+        const renderStats = (mode, params) => {
+          const completionStatus = params.isComplete
+            ? "推定完了"
+            : "問題プール枯渇";
+          const confidenceLevel = Math.round(100 - (params.sigma / 200) * 100);
+
+          return `
+                    <div class="bg-white p-6 rounded-xl border shadow-lg space-y-4">
+                        <h3 class="text-xl font-bold mb-4 text-${
+                          mode === Modes.NORMAL ? "indigo" : "purple"
+                        }-600">${mode}方式の推定結果</h3>
+                        <p class="text-4xl font-extrabold text-gray-900">${Math.round(
+                          params.cpm
+                        )} <span class="text-lg font-normal text-gray-500">CPM</span></p>
+                        <p class="text-sm text-gray-600">（正答率0.8に相当する読解スピードの推定値）</p>
+                        <hr class="my-4">
+                        <div class="space-y-2 text-sm text-gray-700">
+                            <p><strong>状態:</strong> <span class="font-semibold">${completionStatus}</span></p>
+                            <p><strong>信頼度:</strong> 約 ${Math.max(
+                              0,
+                              confidenceLevel
+                            )}%</p>
+                            <p><strong>データポイント数:</strong> ${
+                              params.data.length
+                            }回</p>
+                            <p><strong>最終Σ値:</strong> ${params.sigma.toFixed(
+                              2
+                            )}</p>
+                            <p><strong>収集データ:</strong></p>
+                            <ul class="list-disc list-inside ml-4 text-xs max-h-40 overflow-y-auto">
+                                ${params.data
+                                  .map(
+                                    (d) =>
+                                      `<li>CPM ${Math.round(
+                                        d.cpm_measured
+                                      )} で 得点 ${d.score}</li>`
+                                  )
+                                  .join("")}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+        };
+
+        const allDataPoints = normal.data.length + rsvp.data.length;
+
+        return `
+                <h1 class="text-3xl font-bold text-gray-800 border-b pb-3 mb-6">テスト結果</h1>
+                <p class="mb-6 text-gray-700">
+                    両方式の読解スピードの推定が完了しました。これは統計モデルに基づき、**正答率が80%となる読解スピード（CPM）**を推定したものです。
+                </p>
+                <div class="grid md:grid-cols-2 gap-6">
+                    ${renderStats(Modes.NORMAL, normal)}
+                    ${renderStats(Modes.RSVP, rsvp)}
+                </div>
+                <div class="mt-8 pt-4 border-t text-center">
+                    <p class="text-sm text-gray-500">全回答数: ${allDataPoints}問 | 測定終了理由: 推定完了または問題プール枯渇</p>
+                </div>
+            `;
+      }
+
+      // ====================================================================
+      // 5. テストフロー制御
+      // ====================================================================
+
+      function startTest() {
+        TestState.SCREEN = "GUIDE_TEST";
+        TestState.problemIndex = 0; // ガイド問題のインデックスリセット
+        render();
+      }
+
+      function startNextProblem() {
+        let nextMode = null;
+        let nextProblem = null;
+
+        if (TestState.SCREEN === "GUIDE_TEST") {
+          // ガイド問題のフロー: Normal -> RSVP
+          nextMode = TestState.problemIndex === 0 ? Modes.NORMAL : Modes.RSVP;
+          nextProblem = getNextProblem("guide");
+
+          if (!nextProblem) {
+            // ガイド問題が足りない場合はエラー
+            console.error("ガイド問題が不足しています。");
+            TestState.SCREEN = "RESULT";
+            render();
+            return;
+          }
+        } else if (TestState.SCREEN === "ADAPTIVE_TEST") {
+          // 測定問題のフロー: アダプティブ選択
+          nextMode = getNextMode();
+
+          if (!nextMode) {
+            // 両方完了
+            TestState.SCREEN = "RESULT";
+            render();
+            return;
+          }
+
+          nextProblem = getNextProblem("measurement");
+          if (!nextProblem) {
+            // 問題プール枯渇
+            console.warn("測定問題プールが枯渇しました。推定を終了します。");
+            TestState.SCREEN = "RESULT";
+            // 不確実なモードがあっても強制終了
+            ModelParams[Modes.NORMAL].isComplete = true;
+            ModelParams[Modes.RSVP].isComplete = true;
+            render();
+            return;
+          }
+        }
+
+        TestState.currentMode = nextMode;
+        TestState.currentProblem = nextProblem;
+        TestState.SCREEN = "READING";
+
+        // 画面レンダリング
+        render();
+
+        // RSVP方式の場合、レンダリング後に逐次表示を開始する
+        if (nextMode === Modes.RSVP) {
+          // DOMが更新されるのを待ってから開始
+          setTimeout(startRSVP, 100);
+        }
+      }
+
+      // アプリケーション起動
+      window.onload = () => {
+        render();
+      };
+    </script>
+  </body>
+</html>
