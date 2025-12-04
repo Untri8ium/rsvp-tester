@@ -936,7 +936,7 @@
       const ModelParams = {
         [Modes.NORMAL]: {
           // CPM (Characters Per Minute) 読解スピードの推定値 (P(correct)=0.8に対応)
-          cpm: 600,
+          cpm: 800,
           // sigma (信頼度/不確実性) 小さいほど推定が確実
           sigma: 200,
           // 収集されたデータポイント: [{cpm_measured, score}]
@@ -944,7 +944,7 @@
           isComplete: false,
         },
         [Modes.RSVP]: {
-          cpm: 600,
+          cpm: 800,
           sigma: 200,
           data: [],
           isComplete: false,
@@ -956,7 +956,7 @@
           .length, // 測定問題数
         SIGMA_THRESHOLD: 100, // テスト終了の閾値
         QUESTION_TIME_LIMIT_SEC: 30, // 小問の回答制限時間 (秒)
-        TARGET_SCORE: 0.9, // 目標正答率
+        TARGET_SCORE: 0.5, // 目標正答率
         // 修正: sigmaの減衰率を上げる（より速く確信を持つ）
         LEARNING_RATE_DECAY: 0.85, // sigmaの更新率 (0.9 -> 0.85)
         CPM_LOWER_BOUND: 100,
@@ -1503,7 +1503,7 @@
         return `
                 <h1 class="text-3xl font-bold text-gray-800 border-b pb-3 mb-6">テスト結果</h1>
                 <p class="mb-6 text-gray-700">
-                    両方式の読解スピードの推定が完了しました。これは統計モデルに基づき、**正答率が80%となる読解スピード（CPM）**を推定したものです。
+                    両方式の読解スピードの推定が完了しました。これは統計モデルに基づき、**正答率が50%となる読解スピード（CPM）**を推定したものです。
                 </p>
                 <div class="grid md:grid-cols-2 gap-6">
                     ${renderStats(Modes.NORMAL, normal)}
